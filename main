@@ -1,0 +1,169 @@
+clear all; clc; close all;
+gammabar = 42.58e6;
+gamma = 2*pi*gammabar;
+
+
+%Q1-Q5
+B0 = 1.5;
+tp = 1e-3;
+B1 = 5.8710e-6;
+f_rf = 42.58e6*B0;
+phase = 0;
+
+rf = RectPulse(B1, f_rf, phase, tp);
+iv = disc(3,1);
+%%TE = 0;
+%%TE = 5e-3;
+%%TE = 5e-2;
+%%TE = 1e-1;
+TE = 27.7e-3
+%%TR = 2;
+%%TR = 1;
+%%TR = 5e-1;
+TR = 5;
+%%tau = 0.5e-3;
+tau = 4e-3;
+%%tau = 10e-3;
+
+kmax = 1/2;
+dk = 1/8;
+dk = kmax/ceil(kmax/dk);
+ksx = -kmax:dk:kmax-dk;
+ksy = -kmax:dk:kmax-dk;
+
+
+%brain imaging 4mm pixel
+
+dk = 1/220;
+kmax = 1/8;
+dk = kmax/ceil(kmax/dk);
+ksx = -kmax:dk:kmax-dk;
+
+Gpexs = ksx/(gammabar/tau);
+gx = Gradient([tp tp+tau], {Gpexs 0});
+
+Gfey1 = -kmax/(gammabar/tau);
+Gfey2 = 2*kmax/(gammabar*2*tau);
+gy = Gradient([tp tp+tau TE-tau TE+tau], [Gfey1 0 Gfey2 0]);
+
+dt = 2*tau/length(Gpexs);
+adc = ADC(TE-tau, TE+tau, dt);
+
+figure(4);
+[S, ts] = brain_4mm_pixel(B0, rf, gx, gy, adc, TR, length(Gpexs));
+mrireconstruct(S, kmax, 'Plot', true);
+IV = waterandfat(3, 1);
+
+%Q6
+
+gammabar = 42.58e6;
+gamma = 2*pi*gammabar;
+
+tau = 0.5e-3;
+
+iv = disc(3,1);
+
+kmax = 1/2;
+dk = 1/8;
+dk = kmax/ceil(kmax/dk);
+
+B0 = 1.5; % T
+tp = 1e-3; % ms
+
+B1 = pi/(2*gamma*tp);
+f_rf = gammabar*B0;
+rf = RectPulse(B1, f_rf, 0, tp);
+
+% Phase prewinder
+Gpex1 = [-kmax/(gammabar/tau) 0];
+Tpex1 = [tp tp+tau];
+
+% Frequency prewinder
+Gfey1 = [-kmax/gammabar/tau 0];
+Tfey1 = [tp tp+tau];
+
+% First readout
+Gfey2 = [kmax/gammabar/tau 0];
+Tfey2 = [tp+tau tp+3*tau];
+
+dt = tau*dk/kmax;
+
+Gblip = []; % Leave this empty
+Tblip = []; % Leave this empty
+
+for ll = 2:2*kmax/dk
+Gblip = cat(2,Gblip,[dk/(gammabar*dt) 0]);
+Tblip = cat(2,Tblip, [Tfey2(end) Tfey2(end)+dt]);
+Gfey2 = cat(2,Gfey2,[kmax/gammabar/tau*(-1)^(ll-1) 0]);
+Tfey2 = cat(2,Tfey2, [Tblip(end) Tblip(end)+2*tau]);
+end
+
+gx = Gradient([Tpex1 Tblip], [Gpex1 Gblip]);
+gy = Gradient([Tfey1 Tfey2], [Gfey1 Gfey2]);
+
+adc = ADC(Tfey2(1), Tfey2(end)+dt, dt);
+[S, ts] = seemri(iv, B0, rf, gx, gy, adc, Tfey2(end), 1,'PlotKspace',true);
+
+S = reshape(S,[2*kmax/dk+1 2*kmax/dk]);
+S(:,2:2:end) = flip(S(:,2:2:end)); % Flip every second k-space line
+S(end,:) = []; % Cut away the blip samples
+mrireconstruct(S, kmax, 'Plot', true);  
+
+%Q6_brain
+
+gammabar = 42.58e6;
+gamma = 2*pi*gammabar;
+
+tau = 4e-3;
+%%tau = 0.5e-3;
+
+iv = disc(3,1);
+
+%%kmax = 1/2;
+kmax = 1/8;
+dk = 1/220;
+%%dk = 1/8;
+dk = kmax/ceil(kmax/dk);
+
+B0 = 1.5; % T
+tp = 1e-3; % ms
+
+B1 = pi/(2*gamma*tp);
+f_rf = gammabar*B0;
+rf = RectPulse(B1, f_rf, 0, tp);
+
+% Phase prewinder
+Gpex1 = [-kmax/(gammabar/tau) 0];
+Tpex1 = [tp tp+tau];
+
+% Frequency prewinder
+Gfey1 = [-kmax/gammabar/tau 0];
+Tfey1 = [tp tp+tau];
+
+% First readout
+Gfey2 = [kmax/gammabar/tau 0];
+Tfey2 = [tp+tau tp+3*tau];
+
+dt = tau*dk/kmax;
+
+Gblip = []; % Leave this empty
+Tblip = []; % Leave this empty
+
+for ll = 2:2*kmax/dk
+Gblip = cat(2,Gblip,[dk/(gammabar*dt) 0]);
+Tblip = cat(2,Tblip, [Tfey2(end) Tfey2(end)+dt]);
+Gfey2 = cat(2,Gfey2,[kmax/gammabar/tau*(-1)^(ll-1) 0]);
+Tfey2 = cat(2,Tfey2, [Tblip(end) Tblip(end)+2*tau]);
+end
+
+gx = Gradient([Tpex1 Tblip], [Gpex1 Gblip]);
+gy = Gradient([Tfey1 Tfey2], [Gfey1 Gfey2]);
+
+adc = ADC(Tfey2(1), Tfey2(end)+dt, dt);
+
+[S, ts] = brain_4mm_pixel(B0, rf, gx, gy, adc, Tfey2(end), 1);
+
+S = reshape(S,[2*kmax/dk+1 2*kmax/dk]);
+S(:,2:2:end) = flip(S(:,2:2:end)); % Flip every second k-space line
+S(end,:) = []; % Cut away the blip samples
+mrireconstruct(S, kmax, 'Plot', true);  
